@@ -85,3 +85,33 @@ export function ClipboardIcon(props) {
     </svg>
   );
 }
+
+export function ChevronDownIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function DownloadIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 3v12" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+
+// Generic document shape, reused for both Excel and PDF export buttons —
+// the button label plus an accent color (green/red) tells them apart.
+export function FileIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+      <path d="M14 2v6h6" />
+      <path d="M9 13h6M9 17h6" />
+    </svg>
+  );
+}

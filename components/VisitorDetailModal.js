@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import { VISITOR_PURPOSES } from "@/lib/constants";
+import { downloadFile } from "@/lib/downloadFile";
 import ConfirmDialog from "./ConfirmDialog";
 import IconButton from "./IconButton";
-import { PencilIcon, TrashIcon } from "./icons";
+import { PencilIcon, TrashIcon, DownloadIcon } from "./icons";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -98,6 +99,15 @@ export default function VisitorDetailModal({ visitorId, isAdmin, startInEdit, on
       setError(err.message);
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function handleDownloadPhoto() {
+    try {
+      const ext = visitor.photo.split(".").pop().split("?")[0];
+      await downloadFile(visitor.photo, `${visitor.name.replace(/\s+/g, "-")}-${visitorId}.${ext}`);
+    } catch (err) {
+      setError(err.message);
     }
   }
 
@@ -228,12 +238,23 @@ export default function VisitorDetailModal({ visitorId, isAdmin, startInEdit, on
 
             <div className="flex items-center gap-4">
               {visitor.photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={visitor.photo}
-                  alt={visitor.name}
-                  className="h-24 w-24 rounded-xl object-cover ring-2 ring-slate-200"
-                />
+                <div className="relative h-24 w-24 shrink-0">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={visitor.photo}
+                    alt={visitor.name}
+                    className="h-24 w-24 rounded-xl object-cover ring-2 ring-slate-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleDownloadPhoto}
+                    title="Download photo"
+                    aria-label="Download photo"
+                    className="absolute -bottom-1.5 -right-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-600 shadow ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-900"
+                  >
+                    <DownloadIcon width={14} height={14} />
+                  </button>
+                </div>
               ) : (
                 <div className="flex h-24 w-24 items-center justify-center rounded-xl bg-orange-100 text-3xl font-semibold text-orange-700">
                   {visitor.name?.[0]?.toUpperCase() || "?"}

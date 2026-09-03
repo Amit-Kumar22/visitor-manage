@@ -6,6 +6,9 @@ import { VISITOR_PURPOSES } from "@/lib/constants";
 import { savePhoto } from "@/lib/savePhoto";
 
 const PHONE_REGEX = /^\d{10}$/;
+// Safety cap on the "export all" path so an unbounded dataset can't be pulled
+// into memory in one request.
+const EXPORT_MAX_ROWS = 5000;
 
 // Public: called from the kiosk visitor form at "/". No auth required.
 // Body is multipart/form-data (not JSON) so the captured camera photo can be
@@ -79,7 +82,11 @@ export async function GET(request) {
     const dateFrom = searchParams.get("dateFrom");
     const dateTo = searchParams.get("dateTo");
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "10", 10) || 10));
+    // "all" bypasses pagination for the dashboard's export-to-Excel/PDF flow,
+    // which needs every filtered row, not just the current page.
+    const limitParam = searchParams.get("limit") || "10";
+    const isExportAll = limitParam === "all";
+    const limit = isExportAll ? 0 : Math.min(100, Math.max(1, parseInt(limitParam, 10) || 10));
 
     const query = {};
 
@@ -102,19 +109,21 @@ export async function GET(request) {
     }
 
     const total = await Visitor.countDocuments(query);
-    const visitors = await Visitor.find(query)
-      .sort({ entryTime: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit);
+    const findQuery = Visitor.find(query).sort({ entryTime: -1 });
+    const visitors = isExportAll
+      ? await findQuery.limit(EXPORT_MAX_ROWS)
+      : await findQuery.skip((page - 1) * limit).limit(limit);
 
     return NextResponse.json({
       visitors,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-      },
+      pagination: isExportAll
+        ? { total, page: 1, limit: visitors.length, totalPages: 1 }
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.max(1, Math.ceil(total / limit)),
+          },
     });
   } catch (error) {
     console.error("GET /api/visitors error:", error);

@@ -81,7 +81,7 @@ export default function Sidebar({ user }) {
     try {
       await apiFetch("/api/auth/logout", { method: "POST" });
     } finally {
-      router.push("/admin/login");
+      router.push("/");
       router.refresh();
     }
   }

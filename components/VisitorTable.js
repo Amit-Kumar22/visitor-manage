@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { VISITOR_PURPOSES } from "@/lib/constants";
 import { apiFetch } from "@/lib/apiClient";
 import { ROLES } from "@/lib/roles";
@@ -8,7 +8,7 @@ import VisitorDetailModal from "./VisitorDetailModal";
 import ConfirmDialog from "./ConfirmDialog";
 import Toast from "./Toast";
 import IconButton from "./IconButton";
-import { PencilIcon, TrashIcon } from "./icons";
+import { PencilIcon, TrashIcon, FileIcon, ChevronDownIcon } from "./icons";
 
 const PAGE_SIZE_OPTIONS = [10, 20];
 
@@ -36,6 +36,61 @@ function Avatar({ visitor }) {
   );
 }
 
+function ExportMenu({ exporting, onExportExcel, onExportPdf }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClickOutside(e) {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  function choose(format) {
+    setOpen(false);
+    if (format === "excel") onExportExcel();
+    else onExportPdf();
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        disabled={exporting !== null}
+        className="flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {exporting ? `Exporting ${exporting === "excel" ? "Excel" : "PDF"}...` : "Export"}
+        <ChevronDownIcon width={15} height={15} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 z-10 mt-1 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => choose("excel")}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <FileIcon width={16} height={16} className="text-emerald-600" />
+            Excel (.xlsx)
+          </button>
+          <button
+            type="button"
+            onClick={() => choose("pdf")}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <FileIcon width={16} height={16} className="text-red-600" />
+            PDF
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABLE_HEADERS = [
   "Photo",
   "Name",
@@ -59,6 +114,7 @@ export default function VisitorTable({ role }) {
   const [updatingId, setUpdatingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [exporting, setExporting] = useState(null); // "excel" | "pdf" | null
 
   const [searchInput, setSearchInput] = useState("");
   const [filters, setFilters] = useState({ search: "", purpose: "", dateFrom: "", dateTo: "" });
@@ -160,6 +216,108 @@ export default function VisitorTable({ role }) {
     }
   }
 
+  // Pulls every visitor matching the current filters (not just the current
+  // page) for the export buttons, via the API's limit=all escape hatch.
+  async function fetchAllForExport() {
+    const params = new URLSearchParams();
+    if (filters.search) params.set("search", filters.search);
+    if (filters.purpose) params.set("purpose", filters.purpose);
+    if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+    if (filters.dateTo) params.set("dateTo", filters.dateTo);
+    params.set("limit", "all");
+
+    const res = await apiFetch(`/api/visitors?${params.toString()}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Failed to load visitors for export.");
+    return data.visitors;
+  }
+
+  function toExportRows(list) {
+    return list.map((v) => ({
+      Name: v.name,
+      Phone: v.phone,
+      Address: v.address,
+      Purpose: v.purpose,
+      "Meeting With": v.meetingWith,
+      "Entry Time": formatDateTime(v.entryTime),
+      "Exit Time": formatDateTime(v.exitTime),
+      Status: v.exitTime ? "Checked Out" : "Checked In",
+    }));
+  }
+
+  async function handleExportExcel() {
+    setExporting("excel");
+    try {
+      const list = await fetchAllForExport();
+      if (list.length === 0) {
+        setToast({ type: "error", message: "No visitors match the current filters." });
+        return;
+      }
+
+      const XLSX = await import("xlsx");
+      const sheet = XLSX.utils.json_to_sheet(toExportRows(list));
+      sheet["!cols"] = [20, 14, 28, 12, 18, 20, 20, 14].map((wch) => ({ wch }));
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, sheet, "Visitors");
+      XLSX.writeFile(workbook, `visitors-${todayISODate()}.xlsx`);
+    } catch (err) {
+      setToast({ type: "error", message: err.message });
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function handleExportPdf() {
+    setExporting("pdf");
+    try {
+      const list = await fetchAllForExport();
+      if (list.length === 0) {
+        setToast({ type: "error", message: "No visitors match the current filters." });
+        return;
+      }
+
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+
+      const doc = new jsPDF({ orientation: "landscape" });
+      doc.setFontSize(14);
+      doc.text("Visitor Report", 14, 15);
+      doc.setFontSize(9);
+      doc.setTextColor(100);
+      doc.text(
+        `Generated ${new Date().toLocaleString()} • ${list.length} visitor${list.length === 1 ? "" : "s"}`,
+        14,
+        21
+      );
+
+      autoTable(doc, {
+        startY: 26,
+        head: [["Name", "Phone", "Address", "Purpose", "Meeting With", "Entry Time", "Exit Time", "Status"]],
+        body: list.map((v) => [
+          v.name,
+          v.phone,
+          v.address,
+          v.purpose,
+          v.meetingWith,
+          formatDateTime(v.entryTime),
+          formatDateTime(v.exitTime),
+          v.exitTime ? "Checked Out" : "Checked In",
+        ]),
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [234, 88, 12] },
+      });
+
+      doc.save(`visitors-${todayISODate()}.pdf`);
+    } catch (err) {
+      setToast({ type: "error", message: err.message });
+    } finally {
+      setExporting(null);
+    }
+  }
+
   const { total, totalPages } = pagination;
 
   return (
@@ -228,6 +386,10 @@ export default function VisitorTable({ role }) {
         >
           Clear dates
         </button>
+
+        <div className="ml-auto">
+          <ExportMenu exporting={exporting} onExportExcel={handleExportExcel} onExportPdf={handleExportPdf} />
+        </div>
       </div>
 
       <div className="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200">

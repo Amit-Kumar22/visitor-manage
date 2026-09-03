@@ -298,7 +298,7 @@ export default function VisitorForm() {
 
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">
-              Photo <span className="font-normal text-slate-400">(optional)</span>
+              Photo
             </label>
 
             {photoPreviewUrl ? (
