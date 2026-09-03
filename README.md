@@ -1,36 +1,40 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Visitor Management System
 
-## Getting Started
+A visitor management system for office reception, built with Next.js (App Router), MongoDB, and Tailwind CSS.
 
-First, run the development server:
+## Features
+
+- **Kiosk check-in form** (`/`) — large-tap-target visitor form with live camera photo capture (no gallery access), auto-resets after each submission.
+- **Role-based admin panel** (`/admin`) — two roles:
+  - **Guard**: view visitors, mark exit time.
+  - **Admin**: everything a guard can do, plus edit/delete visitor records and manage user accounts.
+- Search, filter (purpose/date), sort, and paginate visitor records.
+- Responsive sidebar navigation (drawer on mobile, static on desktop).
+
+## Tech stack
+
+- Next.js 16 (App Router, Route Handlers as the API layer)
+- MongoDB + Mongoose
+- Tailwind CSS v4
+- Custom JWT + httpOnly cookie auth (no third-party auth library)
+
+## Local development
 
 ```bash
+npm install
+cp .env.example .env.local   # fill in your own values
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs on `http://localhost:3009`.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Environment variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+See `.env.example` for the full list. Notably:
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `ADMIN_PASSWORD` must be a **bcrypt hash**, not plain text — generate one with:
+  ```bash
+  node -e "console.log(require('bcrypt').hashSync('yourPassword', 10))"
+  ```
+  Escape every `$` in the hash as `\$` when pasting into a `.env*` file — Next.js's env-variable expansion otherwise mangles it.
+- `ADMIN_EMAIL`/`ADMIN_PASSWORD` only seed the **first** admin account on first run; after that, manage users from the admin panel's Users page.
