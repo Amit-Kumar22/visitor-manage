@@ -22,6 +22,8 @@ export function middleware(request) {
   const isProtectedApi =
     (pathname === "/api/visitors" && request.method === "GET") ||
     /^\/api\/visitors\/[^/]+$/.test(pathname) ||
+    (pathname === "/api/guests" && request.method === "GET") ||
+    /^\/api\/guests\/[^/]+$/.test(pathname) ||
     pathname === "/api/users" ||
     /^\/api\/users\/[^/]+$/.test(pathname);
   if (isProtectedApi && !hasCookie) {
@@ -32,5 +34,13 @@ export function middleware(request) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/visitors", "/api/visitors/:id*", "/api/users", "/api/users/:id*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/visitors",
+    "/api/visitors/:id*",
+    "/api/guests",
+    "/api/guests/:id*",
+    "/api/users",
+    "/api/users/:id*",
+  ],
 };

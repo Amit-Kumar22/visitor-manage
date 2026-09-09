@@ -5,10 +5,11 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/apiClient";
 import Logo from "./Logo";
-import { UsersIcon, ClipboardIcon, LogoutIcon, MenuIcon, CloseIcon } from "./icons";
+import { UsersIcon, ClipboardIcon, IdCardIcon, LogoutIcon, MenuIcon, CloseIcon } from "./icons";
 
 const NAV_ITEMS = [
   { href: "/admin/dashboard", label: "Visitors", icon: ClipboardIcon, adminOnly: false },
+  { href: "/admin/guests", label: "Event Guests", icon: IdCardIcon, adminOnly: false },
   { href: "/admin/users", label: "Manage Users", icon: UsersIcon, adminOnly: true },
 ];
 

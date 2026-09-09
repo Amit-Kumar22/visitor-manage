@@ -104,6 +104,17 @@ export function DownloadIcon(props) {
   );
 }
 
+export function IdCardIcon(props) {
+  return (
+    <svg {...base} {...props}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <circle cx="8" cy="11" r="2" />
+      <path d="M5 17c0-1.66 1.34-3 3-3s3 1.34 3 3" />
+      <path d="M14 9h5M14 13h5" />
+    </svg>
+  );
+}
+
 // Generic document shape, reused for both Excel and PDF export buttons —
 // the button label plus an accent color (green/red) tells them apart.
 export function FileIcon(props) {

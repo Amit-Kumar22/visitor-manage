@@ -2,19 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { VISITOR_PURPOSES } from "@/lib/constants";
 import { apiFetch } from "@/lib/apiClient";
 import Logo from "./Logo";
 import Toast from "./Toast";
 
 const EMPTY_FORM = {
   name: "",
-  phone: "",
-  address: "",
-  purpose: "",
-  meetingWith: "",
+  mobile: "",
+  email: "",
+  company: "",
+  designation: "",
+  city: "",
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_DIMENSION = 800;
 const JPEG_QUALITY = 0.7;
 
@@ -36,11 +37,11 @@ function inputClass(error) {
   }`;
 }
 
-export default function VisitorForm() {
+export default function GuestForm() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [successName, setSuccessName] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [toast, setToast] = useState(null);
   // Starts null so the server-rendered markup doesn't embed a timestamp that
   // will never match the client's — the real clock only appears once this
@@ -64,10 +65,10 @@ export default function VisitorForm() {
   }, []);
 
   useEffect(() => {
-    if (!successName) return;
-    const timer = setTimeout(() => setSuccessName(null), 2000);
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(null), 2000);
     return () => clearTimeout(timer);
-  }, [successName]);
+  }, [success]);
 
   // Release the camera hardware whenever the form unmounts, no matter how we got there.
   useEffect(() => stopCamera, []);
@@ -142,6 +143,7 @@ export default function VisitorForm() {
         if (!blob) return;
         setPhotoBlob(blob);
         setPhotoPreviewUrl(URL.createObjectURL(blob));
+        setErrors((e) => ({ ...e, photo: undefined }));
         stopCamera();
       },
       "image/jpeg",
@@ -168,11 +170,10 @@ export default function VisitorForm() {
   function validate() {
     const next = {};
     if (!form.name.trim()) next.name = "Full name is required.";
-    if (!form.phone.trim()) next.phone = "Phone number is required.";
-    else if (!/^\d{10}$/.test(form.phone.trim())) next.phone = "Enter a valid 10-digit phone number.";
-    if (!form.address.trim()) next.address = "Address is required.";
-    if (!form.purpose) next.purpose = "Please select a purpose of visit.";
-    if (!form.meetingWith.trim()) next.meetingWith = "Please enter who they're meeting with.";
+    if (!form.mobile.trim()) next.mobile = "Mobile number is required.";
+    else if (!/^\d{10}$/.test(form.mobile.trim())) next.mobile = "Enter a valid 10-digit mobile number.";
+    if (form.email.trim() && !EMAIL_REGEX.test(form.email.trim())) next.email = "Enter a valid email address.";
+    if (!photoBlob) next.photo = "Please capture a profile photo.";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -192,23 +193,22 @@ export default function VisitorForm() {
     try {
       const body = new FormData();
       body.append("name", form.name.trim());
-      body.append("phone", form.phone.trim());
-      body.append("address", form.address.trim());
-      body.append("purpose", form.purpose);
-      body.append("meetingWith", form.meetingWith.trim());
-      if (photoBlob) {
-        body.append("photo", photoBlob, "visitor-photo.jpg");
-      }
+      body.append("mobile", form.mobile.trim());
+      body.append("email", form.email.trim());
+      body.append("company", form.company.trim());
+      body.append("designation", form.designation.trim());
+      body.append("city", form.city.trim());
+      body.append("photo", photoBlob, "guest-photo.jpg");
 
       // No Content-Type header here — the browser sets the multipart
       // boundary itself when the body is a FormData instance.
-      const res = await apiFetch("/api/visitors", { method: "POST", body });
+      const res = await apiFetch("/api/guests", { method: "POST", body });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Something went wrong. Please try again.");
 
       const submittedName = form.name.trim();
       resetForm();
-      setSuccessName(submittedName);
+      setSuccess({ name: submittedName, registrationId: data.guest.registrationId });
     } catch (err) {
       setToast({ type: "error", message: err.message });
     } finally {
@@ -216,15 +216,19 @@ export default function VisitorForm() {
     }
   }
 
-  if (successName) {
+  if (success) {
     return (
       <div className="flex flex-1 items-center justify-center px-4 py-8">
         <div className="w-full max-w-sm rounded-xl bg-white p-8 text-center shadow-lg ring-1 ring-slate-200">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-3xl">
             ✅
           </div>
-          <h1 className="text-xl font-bold text-slate-900">Thank you, {successName}.</h1>
-          <p className="mt-2 text-sm text-slate-500">You may proceed.</p>
+          <h1 className="text-xl font-bold text-slate-900">Thank you, {success.name}.</h1>
+          <p className="mt-2 text-sm text-slate-500">You&apos;re registered for the event.</p>
+          <div className="mt-4 rounded-lg bg-slate-50 px-3 py-2.5">
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Registration ID</p>
+            <p className="mt-0.5 font-mono text-sm font-semibold text-slate-800">{success.registrationId}</p>
+          </div>
         </div>
       </div>
     );
@@ -236,10 +240,10 @@ export default function VisitorForm() {
       <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
         <div className="mb-5 flex flex-col items-center text-center">
           <Logo size="md" className="mb-2" />
-          <h1 className="text-lg font-bold text-slate-900">Visitor Check-In</h1>
-          <p className="mt-0.5 text-xs text-slate-500">Please fill in your details to check in</p>
-          <Link href="/event" className="mt-2 text-xs font-medium text-orange-600 hover:underline">
-            Here for an event? Register as a guest →
+          <h1 className="text-lg font-bold text-slate-900">Guest Registration</h1>
+          <p className="mt-0.5 text-xs text-slate-500">Please fill in your details to register for the event</p>
+          <Link href="/" className="mt-2 text-xs font-medium text-orange-600 hover:underline">
+            Regular visitor? Check in here →
           </Link>
         </div>
 
@@ -255,59 +259,9 @@ export default function VisitorForm() {
             />
           </Field>
 
-          <Field label="Phone Number" error={errors.phone} required>
-            <input
-              type="tel"
-              inputMode="numeric"
-              maxLength={10}
-              value={form.phone}
-              onChange={(e) => updateField("phone", e.target.value.replace(/\D/g, "").slice(0, 10))}
-              className={inputClass(errors.phone)}
-              placeholder="10-digit mobile number"
-              autoComplete="tel"
-            />
-          </Field>
-
-          <Field label="Address" error={errors.address} required>
-            <textarea
-              rows={2}
-              value={form.address}
-              onChange={(e) => updateField("address", e.target.value)}
-              className={inputClass(errors.address)}
-              placeholder="Your address"
-            />
-          </Field>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Purpose of Visit" error={errors.purpose} required>
-              <select
-                value={form.purpose}
-                onChange={(e) => updateField("purpose", e.target.value)}
-                className={inputClass(errors.purpose)}
-              >
-                <option value="">Select</option>
-                {VISITOR_PURPOSES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </Field>
-
-            <Field label="Meeting With" error={errors.meetingWith} required>
-              <input
-                type="text"
-                value={form.meetingWith}
-                onChange={(e) => updateField("meetingWith", e.target.value)}
-                className={inputClass(errors.meetingWith)}
-                placeholder="Person/dept."
-              />
-            </Field>
-          </div>
-
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">
-              Photo
+              Profile Photo <span className="text-orange-600">*</span>
             </label>
 
             {photoPreviewUrl ? (
@@ -315,7 +269,7 @@ export default function VisitorForm() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={photoPreviewUrl}
-                  alt="Captured visitor"
+                  alt="Captured guest"
                   className="h-14 w-14 rounded-lg object-cover ring-1 ring-slate-200"
                 />
                 <button
@@ -359,19 +313,75 @@ export default function VisitorForm() {
                 type="button"
                 onClick={startCamera}
                 disabled={cameraStarting}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 py-3 text-sm font-medium text-slate-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-60"
+                className={`flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-3 text-sm font-medium hover:border-orange-400 hover:text-orange-600 disabled:opacity-60 ${
+                  errors.photo ? "border-red-400 text-red-500" : "border-slate-300 text-slate-500"
+                }`}
               >
                 📷 {cameraStarting ? "Opening Camera..." : "Take Photo"}
               </button>
             )}
+            {errors.photo && <p className="mt-1 text-xs font-medium text-red-600">{errors.photo}</p>}
           </div>
+
+          <Field label="Mobile Number" error={errors.mobile} required>
+            <input
+              type="tel"
+              inputMode="numeric"
+              maxLength={10}
+              value={form.mobile}
+              onChange={(e) => updateField("mobile", e.target.value.replace(/\D/g, "").slice(0, 10))}
+              className={inputClass(errors.mobile)}
+              placeholder="10-digit mobile number"
+              autoComplete="tel"
+            />
+          </Field>
+
+          <Field label="Email Address" error={errors.email}>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(e) => updateField("email", e.target.value)}
+              className={inputClass(errors.email)}
+              placeholder="you@example.com"
+              autoComplete="email"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Company / Organization">
+              <input
+                type="text"
+                value={form.company}
+                onChange={(e) => updateField("company", e.target.value)}
+                className={inputClass()}
+                placeholder="Company name"
+              />
+            </Field>
+
+            <Field label="Designation">
+              <input
+                type="text"
+                value={form.designation}
+                onChange={(e) => updateField("designation", e.target.value)}
+                className={inputClass()}
+                placeholder="Job title"
+              />
+            </Field>
+          </div>
+
+          <Field label="City">
+            <input
+              type="text"
+              value={form.city}
+              onChange={(e) => updateField("city", e.target.value)}
+              className={inputClass()}
+              placeholder="Your city"
+            />
+          </Field>
 
           <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
             <span>
-              Entry: <strong className="text-slate-700">{now ? now.toLocaleTimeString() : "--:--:--"}</strong>
-            </span>
-            <span>
-              Exit: <strong className="text-slate-400">On departure</strong>
+              Registering at: <strong className="text-slate-700">{now ? now.toLocaleTimeString() : "--:--:--"}</strong>
             </span>
           </div>
 
