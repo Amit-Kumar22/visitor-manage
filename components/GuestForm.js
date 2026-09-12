@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/apiClient";
 import Logo from "./Logo";
+import PhotoCapture from "./PhotoCapture";
 import Toast from "./Toast";
+import { LoginIcon } from "./icons";
 
 const EMPTY_FORM = {
   name: "",
@@ -16,8 +18,6 @@ const EMPTY_FORM = {
 };
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAX_DIMENSION = 800;
-const JPEG_QUALITY = 0.7;
 
 function Field({ label, error, required, children }) {
   return (
@@ -48,14 +48,8 @@ export default function GuestForm() {
   // effect runs after mount, avoiding a hydration mismatch.
   const [now, setNow] = useState(null);
 
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraStarting, setCameraStarting] = useState(false);
-  const [videoReady, setVideoReady] = useState(false);
   const [photoBlob, setPhotoBlob] = useState(null);
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState(null);
-
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: `now` starts null so SSR never embeds a clock value, then this fills it in on mount
@@ -70,96 +64,16 @@ export default function GuestForm() {
     return () => clearTimeout(timer);
   }, [success]);
 
-  // Release the camera hardware whenever the form unmounts, no matter how we got there.
-  useEffect(() => stopCamera, []);
-
-  // Attach the stream once the <video> element has actually mounted. Doing
-  // this in the same tick as setCameraOpen(true) (e.g. via requestAnimationFrame)
-  // is a race: React may not have committed the new <video> to the DOM yet,
-  // so videoRef.current would still be null and the stream would silently
-  // never attach — which is what produced the black screen / dead Capture
-  // button. A useEffect keyed on cameraOpen always runs after that commit.
-  useEffect(() => {
-    if (cameraOpen && streamRef.current && videoRef.current) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch(() => {});
-    }
-  }, [cameraOpen]);
-
-  function stopCamera() {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    setCameraOpen(false);
-    setVideoReady(false);
-  }
-
-  async function startCamera() {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setToast({ type: "error", message: "Camera capture isn't supported in this browser." });
-      return;
-    }
-
-    setCameraStarting(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-        audio: false,
-      });
-      streamRef.current = stream;
-      setVideoReady(false);
-      setCameraOpen(true);
-    } catch {
-      setToast({ type: "error", message: "Camera access was denied or is unavailable." });
-    } finally {
-      setCameraStarting(false);
-    }
-  }
-
-  function capturePhoto() {
-    const video = videoRef.current;
-    if (!video || !video.videoWidth) {
-      setToast({ type: "error", message: "Camera isn't ready yet — please wait a moment." });
-      return;
-    }
-
-    let { videoWidth: width, videoHeight: height } = video;
-    if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
-      if (width > height) {
-        height = Math.round((height * MAX_DIMENSION) / width);
-        width = MAX_DIMENSION;
-      } else {
-        width = Math.round((width * MAX_DIMENSION) / height);
-        height = MAX_DIMENSION;
-      }
-    }
-
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
-    canvas.getContext("2d").drawImage(video, 0, 0, width, height);
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) return;
-        setPhotoBlob(blob);
-        setPhotoPreviewUrl(URL.createObjectURL(blob));
-        setErrors((e) => ({ ...e, photo: undefined }));
-        stopCamera();
-      },
-      "image/jpeg",
-      JPEG_QUALITY
-    );
+  function handleCapture(blob) {
+    setPhotoBlob(blob);
+    setPhotoPreviewUrl(URL.createObjectURL(blob));
+    setErrors((e) => ({ ...e, photo: undefined }));
   }
 
   function clearPhoto() {
     if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
     setPhotoBlob(null);
     setPhotoPreviewUrl(null);
-  }
-
-  function retakePhoto() {
-    clearPhoto();
-    startCamera();
   }
 
   function updateField(field, value) {
@@ -181,7 +95,6 @@ export default function GuestForm() {
   function resetForm() {
     setForm(EMPTY_FORM);
     clearPhoto();
-    stopCamera();
     setErrors({});
   }
 
@@ -237,7 +150,15 @@ export default function GuestForm() {
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-6">
       <Toast toast={toast} onClose={() => setToast(null)} />
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
+      <div className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-lg ring-1 ring-slate-200">
+        <Link
+          href="/admin/login"
+          className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-orange-400 hover:text-orange-600"
+        >
+          <LoginIcon width={14} height={14} />
+          Login
+        </Link>
+
         <div className="mb-5 flex flex-col items-center text-center">
           <Logo size="md" className="mb-2" />
           <h1 className="text-lg font-bold text-slate-900">Guest Registration</h1>
@@ -259,69 +180,16 @@ export default function GuestForm() {
             />
           </Field>
 
-          <div>
-            <label className="mb-1 block text-sm font-semibold text-slate-700">
-              Profile Photo <span className="text-orange-600">*</span>
-            </label>
-
-            {photoPreviewUrl ? (
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={photoPreviewUrl}
-                  alt="Captured guest"
-                  className="h-14 w-14 rounded-lg object-cover ring-1 ring-slate-200"
-                />
-                <button
-                  type="button"
-                  onClick={retakePhoto}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                >
-                  Retake
-                </button>
-              </div>
-            ) : cameraOpen ? (
-              <div className="space-y-2">
-                <div className="relative overflow-hidden rounded-lg bg-black">
-                  <video ref={videoRef} playsInline muted onLoadedMetadata={() => setVideoReady(true)} className="aspect-video w-full" />
-                  {!videoReady && (
-                    <div className="absolute inset-0 flex items-center justify-center text-xs font-medium text-white/80">
-                      Starting camera...
-                    </div>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={capturePhoto}
-                    disabled={!videoReady}
-                    className="flex-1 rounded-lg bg-orange-600 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    📸 Capture
-                  </button>
-                  <button
-                    type="button"
-                    onClick={stopCamera}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={startCamera}
-                disabled={cameraStarting}
-                className={`flex w-full items-center justify-center gap-2 rounded-lg border border-dashed py-3 text-sm font-medium hover:border-orange-400 hover:text-orange-600 disabled:opacity-60 ${
-                  errors.photo ? "border-red-400 text-red-500" : "border-slate-300 text-slate-500"
-                }`}
-              >
-                📷 {cameraStarting ? "Opening Camera..." : "Take Photo"}
-              </button>
-            )}
-            {errors.photo && <p className="mt-1 text-xs font-medium text-red-600">{errors.photo}</p>}
-          </div>
+          <PhotoCapture
+            label="Profile Photo"
+            required
+            alt="Captured guest"
+            error={errors.photo}
+            previewUrl={photoPreviewUrl}
+            onCapture={handleCapture}
+            onRetake={clearPhoto}
+            onError={(message) => setToast({ type: "error", message })}
+          />
 
           <Field label="Mobile Number" error={errors.mobile} required>
             <input
